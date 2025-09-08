@@ -2,10 +2,14 @@ from llama_cpp import Llama
 import chromadb
 from chromadb.utils import embedding_functions
 import datetime
+import os
 
 llama_cli_path="/Users/silas/work/projects/mistral/llama.cpp/build/bin/llama-cli"
 MODEL_PATH="/Users/silas/work/projects/mistral/llama.cpp/models/mistral/"
 MODEL="mistral-7b-instruct-v0.1.Q4_K_M.gguf"
+
+# Path to the RAGable content
+CHARACTER_INFORMATION_PATH="./character_information"
 
 # Chat history save file
 LOG_FILE="chat_log.txt"
@@ -30,16 +34,14 @@ collection = client.get_or_create_collection(
     embedding_function = sentence_embedder
 )
 
-docs = [
-    "Ubisoft released Assassin’s Creed Valhalla in 2020.",
-    "Far Cry 6 was released in 2021.",
-    "Watch Dogs: Legion also launched in 2020."
-]
-
-collection.add(
-    documents=docs,
-    ids=[f"doc_{i}" for i in range(len(docs))]
-)
+# Add all character information to be accessible for the chatbot
+for i, file in enumerate(os.listdir(CHARACTER_INFORMATION_PATH)):
+    # Only add text files
+    if file.endswith(".txt"):
+        collection.add(
+            documents=file,
+            ids=[i]
+        )
 
 # Store the whole coversation
 chat_history = []
