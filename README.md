@@ -48,24 +48,42 @@ Currently this project only features character personalities. However, the code 
 All character information is stored externally in text form. The RAG_MODULE reads this data in and chunks the information. These chunks build the database from which we later RAG the important parts based on the user prompt if relevant. If the user prompt doesn't relate to anything from the character personality, we RAG by using the simple character description, for example: "You are Jack Sparrow, a pirate captain". To spice things a bit up (and cover the limitations of a small language model) we transform the most relevant chunks into a probability distribution adn draw the chunks from it. However, if we for example want to RAG locational information this trick wouldn't work, because sometimes the prompt doesnt't relate to the location. In this case we need to set a threshold and compare it with the distance metric to check wether the information should be included or not. In general RAG is very powerfull to gain controll about what the language model has access to and how it behaves. Especially for small language models RAG can outsource most information and helps to focus only on the important part, while lowering computational cost.
 
 # File structure overview
-├── char_info
-│   └── jack_sparrow
-├── chat_log.txt
-├── chroma
-├── llama.cpp
-│   └── models
-│       └── mistral
-│           └── mistral-7b-instruct-v0.1.Q4_K_M.gguf
-├── main.py
-├── mistral-env
-│   ├── bin
-│   ├── include
-│   ├── lib
-│   ├── pyvenv.cfg
-│   └── share
-├── rag_module.py
-├── README.md
-└── requirements.txt
+>├── char_info
+>│   └── jack_sparrow
+>├── chat_log.txt
+>├── chroma
+>├── llama.cpp
+>│   └── models
+>│       └── mistral
+>│           └── mistral-7b-instruct-v0.1.Q4_K_M.gguf
+>├── main.py
+>├── mistral-env
+>│   ├── bin
+>│   ├── include
+>│   ├── lib
+>│   ├── pyvenv.cfg
+>│   └── share
+>├── rag_module.py
+>├── README.md
+>└── requirements.txt
 
 # How it works
 The RAG module first gets the plain text file input from the character information. Then it creates a Chromadb with embedder function. Now the character information is chunked and saved in chromadb. We can call augment_prompt now from the main script and give it the raw user prompt together with the chat history and the number of chunks we want to retrieve from the character information. augment_prompt will forge everything together for us creating the prompt we feed to the llm.
+
+# Dependencies & Acknowledgments
+
+This project uses the following open-source tools:
+
+- [Mistral-7B-Instruct](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1) – Licensed under Apache 2.0
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) – Licensed under MIT
+- [ChromaDB](https://github.com/chroma-core/chroma) – Licensed under Apache 2.0
+- [sentence-transformers](https://www.sbert.net/) – Licensed under Apache 2.0
+
+These tools are not distributed in this repo; users must install/download them separately.
+
+## 👤 Author
+
+**Silas Theinen**  
+Prompt Engineer & LLM Enthusiast  
+🔗 [GitHub](https://github.com/SATheinen)  
+📫 Reach me on [LinkedIn](https://www.linkedin.com/in/silas-theinen-058977358)  
