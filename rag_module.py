@@ -82,67 +82,78 @@ class RAG_MODULE:
         return prpt_docs, prpt_dists
     
     # return chosen chunks from collection
-    def _RAG_information(self, prompt: str, n_results: int, temp=1.0) -> list:
-        # Always include basic character behavior
-        base_prompt = f"""
-            {self.simple_char_description}
-            """
+    def _RAG_information(self, prompt: str, rng_temp=None, threshold=np.inf, n_max_results=2) -> list:
+
         # Get specific behavior dependent on user prompt
-        user_prompt = f"""
+        rag_prompt = f"""
             {prompt}
             """
     
         # Get relevant information dependent on base prompt and user input
-        base_prpt_docs, base_prpt_dists = self._prompt_result(f"{base_prompt}", n_results=n_results*5)
-        user_prpt_docs, user_prpt_dists = self._prompt_result(f"{user_prompt}", n_results=n_results*5)    
+        prompt_docs, prompt_dists = self._prompt_result(f"{rag_prompt}", n_max_results*5)
 
-        # forge together most relevant information in [(doc, dist)] pairs
-        pairs = (list(zip(base_prpt_docs, base_prpt_dists))
-                + list(zip(user_prpt_docs, user_prpt_dists)))
-        
-        # sort by distance and reduce to n_results
-        sorted_pairs = sorted(pairs, key=lambda x: x[1])
-        most_relevant_pairs = sorted_pairs[:n_results*5]
+        # Use numpy for advanced array operations
+        prompt_dists = np.array(prompt_dists)
 
-        # Zip back to dist and docs
-        docs, dists = zip(*most_relevant_pairs)
-        dists = np.array(list(dists))
-        docs = list(docs)
+        # Remove data with too high distance
+        prompt_dists = np.where(prompt_dists > threshold, np.inf, prompt_dists)
 
-        # More relevant information has lower distances
-        relevance = 1 / dists
+        # Number of docs who survived the threshold
+        num_relevant_docs = np.sum(prompt_dists < threshold)
 
-        # Softmax relevances and get probability dist
-        probs = np.exp(relevance / temp) / np.sum(np.exp(relevance / temp))
+        # Break early if no doc survived the threshold
+        if num_relevant_docs == 0:
+            text = " "
 
-        # Sample from probability distribution
-        chosen_indices = np.random.choice(
-            len(docs),        # population size
-            size=n_results,   # how many samples you want
-            replace=False,    # don’t pick the same doc twice
-            p=probs           # probability distribution
-        )
+        # Probabilistic RAG if rng has a temperature
+        elif rng_temp != None:
+            # Softmax relevances to get probability dist
+            probs = np.exp(-prompt_dists / rng_temp) / np.sum(np.exp(-prompt_dists / rng_temp))
 
-        chosen_docs = [docs[i] for i in chosen_indices]
-        unique_docs = np.unique(chosen_docs).tolist()
+            # Sample from probability distribution
+            chosen_indices = np.random.choice(
+                len(prompt_docs),        # population size
+                size=n_max_results,   # how many samples you want
+                replace=False,    # don’t pick the same doc twice
+                p=probs           # probability distribution
+            )
 
-        text = " ".join(unique_docs)
+            chosen_docs = [prompt_docs[i] for i in chosen_indices]
+
+            text = " ".join(chosen_docs)
+
+        # Deterministic RAG
+        elif rng_temp == None:
+            
+            # Decrease RAGed results when threshold cancels too many items
+            if num_relevant_docs <= n_max_results:
+                n_results = num_relevant_docs
+            else:
+                n_results = n_max_results
+
+            if n_results > 0:
+                text = " ".join(prompt_docs[:n_results])
+            else:
+                text = " "
         
         return text
 
-    def augment_prompt(self, prompt: str, chat_history: str, n_results: int) -> str:
+    def augment_prompt(self, prompt: str, chat_history: str) -> str:
 
         # get relevant text dependent on user prompt
-        retrieved_text = self._RAG_information(prompt, n_results, temp=1.0)
+        retrieved_personality = self._RAG_information(prompt + "\n" + self.simple_char_description, rng_temp=1.0, threshold=np.inf, n_max_results=2)
+        retrieved_surroundings = self._RAG_information(prompt, rng_temp=None, threshold=0.8, n_max_results=2)
 
         # return intruction text with relevant RAGed information
         augmented_prompt = textwrap.dedent(f"""
 
-{self.simple_char_description} {retrieved_text}
+{self.simple_char_description} {retrieved_personality}
 
 Always answer in character as {self.character_name}, using the traits above to guide your style of speech. 
 Do not repeat the traits directly. You only speak as {self.character_name}. Instead, embody them in how you speak.
 Only use information that existed in the temporal context of the person!
+
+{retrieved_surroundings}
 
 Here is the ongoing conversation:
 {chat_history}

@@ -65,13 +65,13 @@ def response(prompt: str) -> str:
     # Convert chat historyies list of text to one big text
     plain_txt_chat_history = "\n\n".join(chat_history).strip()
     # Create an enriched prompt with specific instructions for the llm
-    enriched_prompt = rag_module.augment_prompt(prompt, plain_txt_chat_history, n_results=1)
+    enriched_prompt = rag_module.augment_prompt(prompt, plain_txt_chat_history)
 
-    #print()
-    #print("################################")
-    #print(f"Enriched Prompt:\n{enriched_prompt}")
-    #print("################################")
-    #print()
+    print()
+    print("################################")
+    print(f"Enriched Prompt:\n{enriched_prompt}")
+    print("################################")
+    print()
 
     # Call mistral
     llm_output = llm(
