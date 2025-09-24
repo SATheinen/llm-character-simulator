@@ -22,12 +22,16 @@ MODEL="mistral-7b-instruct-v0.1.Q4_K_M.gguf"
 CHARACTER_INFORMATION_PATH="./char_info/jack_sparrow"
 
 # Chat history save file
-LOG_FILE="chat_log.txt"
+LOG_FILE=f"{CHARACTER_INFORMATION_PATH}/chat_history.txt"
             
 # Delete old Logfile before starting a fresh chatbot run
 if os.path.exists(LOG_FILE):
     print("Deleted old Chat History!")
     os.remove(LOG_FILE)
+
+# Create clean log file
+with open(LOG_FILE, "w", encoding="utf-8") as f:
+    f.write("Conversation Start \n\n")
 
 # Store the whole coversation
 chat_history = []
@@ -57,15 +61,12 @@ def response(prompt: str) -> str:
     global chat_history
     
     # How many turns to store in chat history [User:, Chatbot:, ... max_turns times]
-    max_turns = 2
+    max_turns = 1
     if (len(chat_history) // 2) > max_turns:
         chat_history = chat_history[2:]
-    #print(f"Chat History length: {len(chat_history)}")
 
-    # Convert chat historyies list of text to one big text
-    plain_txt_chat_history = "\n\n".join(chat_history).strip()
     # Create an enriched prompt with specific instructions for the llm
-    enriched_prompt = rag_module.augment_prompt(prompt, plain_txt_chat_history)
+    enriched_prompt = rag_module.augment_prompt(prompt, chat_history)
 
     print()
     print("################################")
@@ -76,7 +77,7 @@ def response(prompt: str) -> str:
     # Call mistral
     llm_output = llm(
         f"{enriched_prompt}",
-        max_tokens=200,
+        max_tokens=400,
         temperature=0.7,
         top_p=0.9,
         repeat_penalty=1.3,   # discourage repeating exact tokens

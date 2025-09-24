@@ -16,21 +16,18 @@ class RAG_MODULE:
         # Path containing the character information files
         self.CHARACTER_INFORMATION_PATH = CHARACTER_INFORMATION_PATH
         # Create chroma for RAG interactions
-        self.client = chromadb.PersistentClient(path="./chroma") 
+        self.client = chromadb.Client() 
 
         # Embed functions into vector representation
         self.embedder = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name="all-MiniLM-L6-v2"  # small, 384-dim, works offline
         )
 
-        # create empty collection
-        self.collection = self.client.get_or_create_collection(
-            name="Information",
-            embedding_function = self.embedder
-        )
+        # Store different collections here
+        self.collection_dict = {}
 
-        # add information from CHARACTER_INFORMATION_PATH to collection
-        self._add_information_to_collection()
+        # Create collections and fill them with data from the person files
+        self._build_collections()
 
     # Chunk information from text files
     def _sentence_chunk(self, text: str, max_len: int) -> str:
@@ -51,38 +48,71 @@ class RAG_MODULE:
                 current += " " + sentence
         
         return chunks
+    
+    def _create_empty_collection(self, collection_name):
 
-    def _add_information_to_collection(self):
-        # Add all character information to be accessible for the chatbot
-        for i, file in enumerate(os.listdir(self.CHARACTER_INFORMATION_PATH)):
-            # Only add text files
-            if file.endswith(".txt"):
-                print(f"{file} found and added to context")
-                # Search for all available files 
-                file_path = os.path.join(self.CHARACTER_INFORMATION_PATH, file)
-                # Chunk the text
-                with open(file_path, "r", encoding="utf-8") as f:
-                    chunks = self._sentence_chunk(f.read().strip(), max_len=100)
+        # create empty collection
+        self.collection_dict[collection_name] = self.client.get_or_create_collection(
+            name=f"{collection_name}",
+            embedding_function = self.embedder
+            )
+        
+        return None
 
-                # Add the chunks to the database
-                for i, chunk in enumerate(chunks):
-                    self.collection.add(
-                        documents=[chunk],      # actual text, not the filename
-                        ids=[f"{file}_chunk_{i}"],        # unique id for each file
-                        metadatas=[{"source": file}]  # optional: keep track of source file
-                    )
+    def _add_information_to_collection(self, collection_name, information):
+
+        # Chunk the text
+        chunks = self._sentence_chunk(information, max_len=100)
+        
+        # Search the matching collection
+        collection = self.collection_dict[collection_name]
+
+        # Add the chunks to the database
+        for i, chunk in enumerate(chunks):
+            collection.add(
+                documents=[chunk],      # actual text, not the filename
+                ids=[f"{collection_name}_chunk_{i}"],        # unique id for each file
+                metadatas=[{"source": collection_name}]  # keep track of source file
+            )
+
         return None
 
     # Get Most relevant information
-    def _prompt_result(self, prompt: str, n_results: int):
-        prpt_res = self.collection.query(query_texts=[prompt],
+    def _prompt_result(self, prompt: str, collection_name, n_results: int):
+
+        # Get the collection to RAG from
+        collection = self.collection_dict[collection_name]
+
+        # Rag in chromadb
+        prpt_res = collection.query(query_texts=[prompt],
                                     n_results=n_results*5, include=["documents", "distances"])
         prpt_docs = prpt_res["documents"][0]
         prpt_dists = prpt_res["distances"][0]
         return prpt_docs, prpt_dists
     
+    def _build_collections(self):
+
+        # Add all character information to be accessible for the chatbot
+        for file in os.listdir(self.CHARACTER_INFORMATION_PATH):
+            # get filename without .txt ending
+            filename = file.split(".")[0]
+
+            # Create and add information for each text file
+            if file.endswith(".txt"):
+
+                file_path = os.path.join(self.CHARACTER_INFORMATION_PATH, f"{filename}.txt")
+                # Get information from file
+                with open(file_path, "r", encoding="utf-8") as f:
+                    information = f.read().strip()
+
+                self._create_empty_collection(filename)
+                self._add_information_to_collection(collection_name=filename, information=information)
+                print(f"{file} found and added to context")
+
+        return None
+    
     # return chosen chunks from collection
-    def _RAG_information(self, prompt: str, rng_temp=None, threshold=np.inf, n_max_results=2) -> list:
+    def _RAG_information(self, prompt: str, collection_name: str, rng_temp=None, threshold=np.inf, n_max_results=2) -> list:
 
         # Get specific behavior dependent on user prompt
         rag_prompt = f"""
@@ -90,7 +120,7 @@ class RAG_MODULE:
             """
     
         # Get relevant information dependent on base prompt and user input
-        prompt_docs, prompt_dists = self._prompt_result(f"{rag_prompt}", n_max_results*5)
+        prompt_docs, prompt_dists = self._prompt_result(f"{rag_prompt}", collection_name, n_max_results*5)
 
         # Use numpy for advanced array operations
         prompt_dists = np.array(prompt_dists)
@@ -140,9 +170,16 @@ class RAG_MODULE:
 
     def augment_prompt(self, prompt: str, chat_history: str) -> str:
 
+        # Convert chat historyies list of text to one big text
+        plain_txt_chat_history = "\n\n".join(chat_history).strip()
+
+        # Add new chat details to chromadb
+        self._add_information_to_collection("chat_history", "\n\n".join(chat_history[:-2]))
+
         # get relevant text dependent on user prompt
-        retrieved_personality = self._RAG_information(prompt + "\n" + self.simple_char_description, rng_temp=1.0, threshold=np.inf, n_max_results=2)
-        retrieved_surroundings = self._RAG_information(prompt, rng_temp=None, threshold=0.8, n_max_results=2)
+        retrieved_personality = self._RAG_information(prompt + "\n" + self.simple_char_description, "personality", rng_temp=1.0, threshold=np.inf, n_max_results=2)
+        retrieved_surroundings = self._RAG_information(prompt, "surroundings", rng_temp=None, threshold=0.8, n_max_results=2)
+        retrieved_chathistory = self._RAG_information(prompt, "chat_history", rng_temp=None, threshold=0.8, n_max_results=2)
 
         # return intruction text with relevant RAGed information
         augmented_prompt = textwrap.dedent(f"""
@@ -156,7 +193,9 @@ Only use information that existed in the temporal context of the person!
 {retrieved_surroundings}
 
 Here is the ongoing conversation:
-{chat_history}
+{retrieved_chathistory}
+
+{plain_txt_chat_history}
 
 This is the current prompt:
 {prompt}
