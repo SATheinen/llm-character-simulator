@@ -5,7 +5,7 @@ from chromadb.utils import embedding_functions
 import os
 import re
 
-class RAG_MODULE:
+class SEMANTIC_SEARCH_MODULE:
     def __init__(self, CHARACTER_INFORMATION_PATH,
                   simple_char_description, character_name):
 
@@ -15,7 +15,7 @@ class RAG_MODULE:
 
         # Path containing the character information files
         self.CHARACTER_INFORMATION_PATH = CHARACTER_INFORMATION_PATH
-        # Create chroma for RAG interactions
+        # Create chroma to endable document search
         self.client = chromadb.Client() 
 
         # Embed functions into vector representation
@@ -80,10 +80,10 @@ class RAG_MODULE:
     # Get Most relevant information
     def _prompt_result(self, prompt: str, collection_name, n_results: int):
 
-        # Get the collection to RAG from
+        # Get the collection to search from
         collection = self.collection_dict[collection_name]
 
-        # Rag in chromadb
+        # Search in chromadb
         prpt_res = collection.query(query_texts=[prompt],
                                     n_results=n_results*5, include=["documents", "distances"])
         prpt_docs = prpt_res["documents"][0]
@@ -112,15 +112,15 @@ class RAG_MODULE:
         return None
     
     # return chosen chunks from collection
-    def _RAG_information(self, prompt: str, collection_name: str, rng_temp=None, threshold=np.inf, n_max_results=2) -> list:
+    def _search_information(self, prompt: str, collection_name: str, rng_temp=None, threshold=np.inf, n_max_results=2) -> list:
 
         # Get specific behavior dependent on user prompt
-        rag_prompt = f"""
+        search_prompt = f"""
             {prompt}
             """
     
         # Get relevant information dependent on base prompt and user input
-        prompt_docs, prompt_dists = self._prompt_result(f"{rag_prompt}", collection_name, n_max_results*5)
+        prompt_docs, prompt_dists = self._prompt_result(f"{search_prompt}", collection_name, n_max_results*5)
 
         # Use numpy for advanced array operations
         prompt_dists = np.array(prompt_dists)
@@ -135,7 +135,7 @@ class RAG_MODULE:
         if num_relevant_docs == 0:
             text = " "
 
-        # Probabilistic RAG if rng has a temperature
+        # Probabilistic search if rng has a temperature
         elif rng_temp != None:
             # Softmax relevances to get probability dist
             probs = np.exp(-prompt_dists / rng_temp) / np.sum(np.exp(-prompt_dists / rng_temp))
@@ -152,10 +152,10 @@ class RAG_MODULE:
 
             text = " ".join(chosen_docs)
 
-        # Deterministic RAG
+        # Deterministic search
         elif rng_temp == None:
             
-            # Decrease RAGed results when threshold cancels too many items
+            # Decrease search results when threshold cancels too many items
             if num_relevant_docs <= n_max_results:
                 n_results = num_relevant_docs
             else:
@@ -177,11 +177,11 @@ class RAG_MODULE:
         self._add_information_to_collection("chat_history", "\n\n".join(chat_history[:-2]))
 
         # get relevant text dependent on user prompt
-        retrieved_personality = self._RAG_information(prompt + "\n" + self.simple_char_description, "personality", rng_temp=1.0, threshold=np.inf, n_max_results=2)
-        retrieved_surroundings = self._RAG_information(prompt, "surroundings", rng_temp=None, threshold=0.8, n_max_results=2)
-        retrieved_chathistory = self._RAG_information(prompt, "chat_history", rng_temp=None, threshold=0.8, n_max_results=2)
+        retrieved_personality = self._search_information(prompt + "\n" + self.simple_char_description, "personality", rng_temp=1.0, threshold=np.inf, n_max_results=2)
+        retrieved_surroundings = self._search_information(prompt, "surroundings", rng_temp=None, threshold=0.8, n_max_results=2)
+        retrieved_chathistory = self._search_information(prompt, "chat_history", rng_temp=None, threshold=0.8, n_max_results=2)
 
-        # return intruction text with relevant RAGed information
+        # return instruction text with relevant search information
         augmented_prompt = textwrap.dedent(f"""
 
 {self.simple_char_description} {retrieved_personality}

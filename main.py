@@ -8,17 +8,17 @@ import numpy as np
 import textwrap
 import json
 
-import rag_module
-print(rag_module.__file__)
+import semantic_search_module
+print(semantic_search_module.__file__)
 
-# Get the ragmodule from another python file
-from rag_module import RAG_MODULE
+# Get the semantic search module from another python file
+from semantic_search_module import SEMANTIC_SEARCH_MODULE
 
 llama_cli_path="/Users/silas/work/projects/mistral/llama.cpp/build/bin/llama-cli"
 MODEL_PATH="/Users/silas/work/projects/mistral/llama.cpp/models/mistral/"
 MODEL="mistral-7b-instruct-v0.1.Q4_K_M.gguf"
 
-# Path to the character information with RAGable content
+# Path to the character information with searchable content
 CHARACTER_INFORMATION_PATH="./char_info/jack_sparrow"
 
 # Chat history save file
@@ -44,8 +44,8 @@ with open(base_info_path, 'r', encoding="utf-8") as f:
 character_name = base_info["name"]
 char_description = base_info["simple_description"]
 
-# Initialize a rag_module 
-rag_module = RAG_MODULE(CHARACTER_INFORMATION_PATH, char_description, character_name)
+# Initialize semantic search module 
+semantic_search_module = SEMANTIC_SEARCH_MODULE(CHARACTER_INFORMATION_PATH, char_description, character_name)
 
 # Get Mistral
 llm = Llama(
@@ -66,7 +66,7 @@ def response(prompt: str) -> str:
         chat_history = chat_history[2:]
 
     # Create an enriched prompt with specific instructions for the llm
-    enriched_prompt = rag_module.augment_prompt(prompt, chat_history)
+    enriched_prompt = semantic_search_module.augment_prompt(prompt, chat_history)
 
     print()
     print("################################")
